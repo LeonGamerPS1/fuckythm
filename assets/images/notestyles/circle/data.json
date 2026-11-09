@@ -1,0 +1,7 @@
+{
+    "type":"images",
+    "scale":1,
+    "laneSprites":false,
+    "images":{"glow":"notestyles/circle/head","receptor":"notestyles/circle/gray","hold":"notestyles/circle/hold","tail":"notestyles/circle/cap"}
+
+}
