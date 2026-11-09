@@ -1,7 +1,14 @@
 {
-    "type":"images",
-    "scale":1,
-    "laneSprites":false,
-    "images":{"glow":"notestyles/circle/head","receptor":"notestyles/circle/gray","hold":"notestyles/circle/hold","tail":"notestyles/circle/cap"}
-
+  "colored": false,
+  "scale": 0.7,
+  "tailHeight": 80,
+  "antialiasing":true,
+  "name":"Circle Noteskin (Fuckythm)",
+  "images": {
+    "glow": "notestyles/circle/glow",
+    "head": "notestyles/cricle/head",
+    "receptor": "notestyles/circle/receptor",
+    "hold": "notestyles/circle/hold",
+    "tail": "notestyles/circle/cap"
+  }
 }

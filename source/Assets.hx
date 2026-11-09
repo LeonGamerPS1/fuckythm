@@ -1,25 +1,12 @@
 package;
 
-
-
-#if (AnimateAtlasSupported)
-import animate.FlxAnimateFrames;
-import animate.FlxAnimateFrames;
-#end
 import flixel.graphics.frames.FlxFramesCollection;
 import flixel.math.FlxMatrix;
 import haxe.MainLoop;
-import haxe.io.Path;
-import lime.media.AudioBuffer;
-import lime.media.vorbis.VorbisFile;
-import modding.Mods;
-import openfl.display.BitmapData;
 import openfl.media.Sound;
 import openfl.utils.AssetType;
-import sys.FileSystem;
-import sys.io.File;
 
-class AssetPaths
+class Assets
 {
 	public static var cachedImages:haxe.ds.StringMap<FlxGraphic> = new haxe.ds.StringMap<FlxGraphic>();
 	public static var cachedSounds:haxe.ds.StringMap<Sound> = new haxe.ds.StringMap<Sound>();
@@ -27,12 +14,11 @@ class AssetPaths
 
 	public static function clearGraphics()
 	{
-		for (k => img in cachedImages)
+		for (img in cachedImages)
 		{
 			if (img == null || img.destroyOnNoUse)
 				continue;
 
-			OpenFLAssets.cache.clear(k);
 			img.persist = false;
 			@:bypassAccessor
 			img.destroyOnNoUse = true;
@@ -45,22 +31,10 @@ class AssetPaths
 		cachedAtlases.clear();
 
 		FlxG.bitmap.clearCache();
-		OpenFLAssets.cache.clear('assets/images');
 	}
 
-	public static function getPath(path:String)
-	{
-		if (path.startsWith('assets'))
-			path = path.replace('assets/', '');
-		for (mod in Mods.getActiveMods())
-		{
-			var path = Path.join([Mods.MOD_ROOT, mod.id, path]);
-
-			if (FileSystem.exists(path))
-				return path;
-		}
+	public static inline function getPath(path:String)
 		return 'assets/$path';
-	}
 
 	static public var defaultMatrix:FlxMatrix = new FlxMatrix();
 
@@ -70,16 +44,15 @@ class AssetPaths
 		if (cachedImages.exists(path))
 			return cachedImages.get(path);
 
-		if (!FileSystem.exists(path))
+		if (!OpenFLAssets.exists(path))
 		{
 			FlxG.log.warn('oh noes! image not here $path');
 			return null;
 		}
 
-		var bitmap = BitmapData.fromFile(path);
+		var bitmap = FlxG.assets.getBitmapData(path, true);
 
-		if (ClientPrefs.data.cacheOnGPU)
-			bitmap.disposeImage();
+		bitmap.disposeImage();
 
 		var graphic = FlxGraphic.fromBitmapData(bitmap, false, path, false);
 		graphic.persist = true;
@@ -89,8 +62,6 @@ class AssetPaths
 
 	public static function clear()
 	{
-		if (FlxG.state is PlayState)
-			return;
 		clearGraphics();
 	}
 
@@ -114,20 +85,19 @@ class AssetPaths
 		if (cachedSounds.exists(path))
 			return cachedSounds.get(path);
 
-		if (!FileSystem.exists(path))
-			return null;
+		if (!OpenFLAssets.exists(path, SOUND))
+			return getSound('sounds/beep', stream, OGG);
 
-		var sound:Sound = stream ? streamed(path) : Sound.fromFile(path);
+		var sound:Sound = #if FLX_STREAM_SOUND stream ? FlxG.assets.streamSound(path) : #end
+		FlxG.assets.getSound(path, false);
 		cachedSounds.set(path, sound);
 		return sound;
 	}
 
 	public static function exists(s:String, ?type:AssetType)
 	{
-		if (FileSystem.exists(s))
-			return true;
 		var path = getPath(s);
-		return FileSystem.exists(path);
+		return OpenFLAssets.exists(path, type);
 	}
 
 	public static function getFont(path:String, fontType:FontExtension = TTF):String
@@ -147,13 +117,13 @@ class AssetPaths
 			return cast cachedAtlases.get(pathXML);
 		else if (cachedAtlases.exists(pathPng))
 			return cast cachedAtlases.get(pathXML);
-		if (!FileSystem.exists(pathPng) || !FileSystem.exists(pathXML))
+		if (!OpenFLAssets.exists(pathPng) || !OpenFLAssets.exists(pathXML))
 		{
-			trace('oh noes!!! atlas not here!!! $pathPng | $pathXML');
+			FlxG.log.warn('oh noes!!! atlas not here!!! $pathPng | $pathXML');
 			return null;
 		}
 
-		var atlas = FlxAtlasFrames.fromSparrow(getGraphic(path), getText(pathXML));
+		var atlas = FlxAtlasFrames.fromSparrow(getGraphic(path), pathXML);
 		atlas.parent.persist = true;
 		cachedAtlases.set(pathXML, atlas);
 		cachedAtlases.set(pathPng, atlas);
@@ -162,46 +132,19 @@ class AssetPaths
 
 	public static function getMultiSparrowAtlas(paths:Array<String>):FlxAtlasFrames
 	{
-		if (paths.length == 1)
-			return getSparrowAtlas(paths[0]);
 		if (cachedAtlases.exists(paths.toString()))
 			return cast cachedAtlases.get(paths.toString());
 
 		var megaAtlas = new FlxAtlasFrames(null);
 		for (goreSee in paths)
 		{
-			var atlas = getSparrowAtlas(goreSee);
-			if (atlas != null)
-				megaAtlas.addAtlas(atlas);
+			megaAtlas.addAtlas(getSparrowAtlas(goreSee));
 		}
 		cachedAtlases.set(paths.toString(), megaAtlas);
 
 		return megaAtlas;
 	}
 
-    	#if (AnimateAtlasSupported)
-	public static function getAnimateAtlas(path:String):FlxAnimateFrames
-	{
-		var path = getPath('images/$path');
-		final animJSON = path + "/Animation.json";
-
-		if (cachedAtlases.exists(animJSON))
-			return cast cachedAtlases.get(animJSON);
-		if (!FileSystem.exists(animJSON))
-		{
-			FlxG.log.warn('oh noes!!! atlas not here!!! $path');
-			return null;
-		}
-
-		var atlas = FlxAnimateFrames.fromAnimate(path);
-		if (ClientPrefs.data.cacheOnGPU)
-			atlas.parent?.bitmap.disposeImage();
-		cachedAtlases.set(animJSON, atlas);
-		atlas.parent.persist = true;
-
-		return atlas;
-	}
-    #end
 	/**
 	 * @author TheRealJake12, slightly edited by LeonGamerPS1
 	 * Wack Ass Attempt To Make An OpenFl Equivalent For `FileSystem.readDirectory`
@@ -218,22 +161,6 @@ class AssetPaths
 		final list:Array<String> = lib.list(type);
 		path = 'assets/$path';
 		var stringList:Array<String> = [];
-		for (mod in Mods.getActiveMods())
-		{
-			var basePath = Mods.MOD_ROOT + '/' + mod.id + '/' + path.replace('assets/', '');
-			trace('scanning in mods for path $basePath');
-			if (!FileSystem.exists(basePath))
-				continue;
-
-			for (file in FileSystem.readDirectory(basePath))
-			{
-				var pathToAdd = removePath ? file : '$basePath/$file';
-				trace(pathToAdd);
-				if (!pathToAdd.endsWith(suffix))
-					continue;
-				stringList.push(pathToAdd);
-			}
-		}
 		for (hmm in list)
 		{
 			if (!hmm.startsWith(path) || !hmm.endsWith(suffix))
@@ -255,27 +182,6 @@ class AssetPaths
 		return path;
 	}
 
-	public static function streamed(id:String, useCache:Bool = true):Sound
-	{
-		#if (lime_vorbis && lime > "7.9.0")
-		var path = id;
-		var vorbisFile = VorbisFile.fromFile(path);
-		if (vorbisFile != null)
-		{
-			var buffer = AudioBuffer.fromVorbisFile(vorbisFile);
-			return Sound.fromAudioBuffer(buffer);
-		}
-		else
-		{
-			// TODO: Streaming sound
-			return Sound.fromFile(id);
-		}
-		#else
-		// TODO: Streaming sound
-		return Sound.fromFile(id);
-		#end
-	}
-
 	public static function vertShader(shaderName:String)
 	{
 		var path = getPath('shaders/$shaderName.vert');
@@ -285,20 +191,17 @@ class AssetPaths
 	public static function GetVertShader(shaderName:String):String
 	{
 		var path = vertShader(shaderName);
-		return getText(path);
+		return FlxG.assets.getText(path, false);
 	}
 
 	public static function GetFragShader(shaderName:String):String
 	{
 		var path = fragShader(shaderName);
-		return getText(path);
+		return FlxG.assets.getText(path, false);
 	}
 
-	public static function getText(path:String)
-	{
-		if (FileSystem.exists(path))
-			return File.getContent(path);
-		return File.getContent(getPath(path));
+	public static function getText(path:String) {
+		return OpenFLAssets.getText(path);
 	}
 }
 
